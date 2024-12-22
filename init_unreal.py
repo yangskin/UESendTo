@@ -2,26 +2,52 @@ import unreal
 import os
 import subprocess
 
+'''
+Tick_timer 类用于管理一个定时器，该定时器在指定的时间间隔内触发。
+
+interval: 定时器的时间间隔，默认为1.0秒。
+_tick: 用于存储定时器的回调标识。
+_current_tick_interval: 记录自上次触发以来的时间累积。
+
+方法:
+__init__(interval): 构造函数，初始化定时器并注册Slate后置tick回调。
+_timer(delta): 定时器回调函数，处理时间累积并触发定时事件。
+_stop(): 停止定时器，注销Slate后置tick回调。
+'''
 class Tick_timer():
-    __tick_elapsed__ = 0
-    __tick__ = None
+    _tick = None
     interval:float = 1.0
+    _current_tick_interval = 0
 
     def __init__(self, interval = 1.0):
         self.interval = interval
-        self.__tick__ = unreal.register_slate_post_tick_callback(self._timer)
+        self._tick = unreal.register_slate_post_tick_callback(self._timer)
 
     def _timer(self, delta):
-        self.__tick_elapsed__ += delta
+        self._current_tick_interval += delta
 
-        if self.__tick_elapsed__ < self.interval:
+        if self._current_tick_interval < self.interval:
             return
         
-        self.__tick_elapsed__ = 0
+        self._current_tick_interval = 0
 
     def _stop(self):
-        unreal.unregister_slate_post_tick_callback(self.__tick__)
+        unreal.unregister_slate_post_tick_callback(self._tick)
 
+"""
+该类用于检查纹理引用，并在纹理文件更新时自动重新导入资产。
+
+- `asset_path`: 纹理资产的路径。
+- `folder_path`: 纹理文件所在的文件夹路径（未在代码中使用）。
+- `current_check_texture_file_path`: 当前检查的纹理文件路径。
+- `last_mod_time`: 上次修改纹理文件的时间戳。
+- `popen`: 用于执行外部命令的子进程。
+
+该类继承自`Tick_timer`，并定期检查纹理文件是否被修改。如果文件被修改，它将重新加载纹理资产，并尝试保留原有的sRGB、压缩设置和LOD组设置。
+
+- `__init__(self, texture_path, asset_path, popen:subprocess.Popen)`: 构造函数，初始化检查器并设置定时器。
+- `_timer(self, delta)`: 定时器回调函数，检查纹理文件是否被修改，并在必要时重新导入资产。
+"""
 class Check_texture_refs(Tick_timer):
     asset_path = ''
     folder_path = ''
@@ -55,6 +81,7 @@ class Check_texture_refs(Tick_timer):
             if current_mod_time != self.last_mod_time:
                 self.last_mod_time = current_mod_time 
 
+                #ue5.5以前版本重新导入贴图后无法保持之前的设置，需要把关键设置记录，并在重新导入后重新设置。
                 current_texture:unreal.Texture2D = unreal.EditorAssetLibrary.load_asset(self.asset_path)
                 srgb = current_texture.get_editor_property("srgb")
                 compression_settings = current_texture.get_editor_property("compression_settings")
@@ -71,6 +98,13 @@ class Check_texture_refs(Tick_timer):
                 current_texture.set_editor_property("compression_settings", compression_settings)
                 current_texture.set_editor_property("lod_group", lod_group)
 
+'''
+open_phtoshop 类用于在 Unreal 编辑器中导出选中的纹理，并尝试打开 Photoshop 来处理这些纹理。
+
+find_phtoshop_exe_path 方法会搜索系统中可能安装的 Photoshop 可执行文件路径。
+export_select_texture 方法会导出选中的纹理文件到临时目录，并返回导出文件的路径。
+open 方法会调用上述两个方法，如果找到 Photoshop 并成功导出纹理，则会启动 Photoshop 打开导出的纹理文件。
+'''
 class open_phtoshop():
 
     asset_path = ''
@@ -116,6 +150,13 @@ class open_phtoshop():
                 process = subprocess.Popen(command)
                 Check_texture_refs(export_tex_path, self.asset_path, process)
                 
+"""
+该代码段用于在Unreal Engine的内容浏览器资产上下文菜单中添加一个子菜单项，以便用户可以将资产发送到Photoshop。具体实现包括：
+1. 获取内容浏览器的工具菜单。
+2. 在工具菜单中添加一个名为'GetAssetActions'的子菜单。
+3. 在子菜单中添加一个名为'send to photoshop'的菜单项。
+4. 当用户选择此菜单项时，将调用`open_phtoshop_obj.open()`方法打开Photoshop。
+"""
 global open_phtoshop_obj 
 open_phtoshop_obj = open_phtoshop()
 
