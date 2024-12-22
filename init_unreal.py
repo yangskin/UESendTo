@@ -163,11 +163,11 @@ open_phtoshop_obj = open_phtoshop()
 menus = unreal.ToolMenus.get()
 menu:unreal.ToolMenu = menus.find_menu('ContentBrowser.AssetContextMenu')
 
-send_menu:unreal.ToolMenu = menu.add_sub_menu(menu.get_name(), 'GetAssetActions', 'send', 'send', '')
+send_menu:unreal.ToolMenu = menu.add_sub_menu(menu.get_name(), 'GetAssetActions', 'send', 'Send', '')
 send_menu.menu_type = unreal.MultiBoxType.MENU
 
-entry:unreal.ToolMenuEntry = unreal.ToolMenuEntry(name='send.sendPhtoshop', type=unreal.MultiBlockType.MENU_ENTRY)
-entry.set_label('send to photoshop')
+entry:unreal.ToolMenuEntry = unreal.ToolMenuEntry(name='SendPhtoshop', type=unreal.MultiBlockType.MENU_ENTRY)
+entry.set_label('Send to photoshop')
 entry.set_string_command(unreal.ToolMenuStringCommandType.PYTHON, '', 'open_phtoshop_obj.open()')
 
 send_menu.add_menu_entry('Settings', entry)
