@@ -53,16 +53,18 @@ class Check_texture_refs(Tick_timer):
     folder_path = ''
     current_check_texture_file_path = ''
     last_mod_time = 0
-    popen:subprocess.Popen = None
+    open_phtoshop_ins = None
+    process:subprocess.Popen = None
 
-    def __init__(self, texture_path, asset_path, popen:subprocess.Popen):
+    def __init__(self, texture_path, asset_path, open_phtoshop_ins, process:subprocess.Popen):
         if not os.path.exists(texture_path):
             return
 
         self.asset_path = asset_path
         self.current_check_texture_file_path = texture_path
         self.last_mod_time = os.path.getmtime(self.current_check_texture_file_path)
-        self.popen = popen
+        self.open_phtoshop_ins = open_phtoshop_ins
+        self.process = process
 
         super().__init__(1.0)
 
@@ -72,10 +74,14 @@ class Check_texture_refs(Tick_timer):
         
         if os.path.exists(self.current_check_texture_file_path):
 
-            if self.popen.poll() is not None:
-                self._stop()
-                os.remove(self.current_check_texture_file_path)
-                return
+            if self.process.poll() is not None:
+                if self.process.poll() == 0:
+                    self._stop()
+                    for export_path in self.open_phtoshop_ins.export_paths:
+                        if os.path.exists(export_path):
+                            os.remove(export_path)
+                    self.process.terminate()
+                    return
 
             current_mod_time = os.path.getmtime(self.current_check_texture_file_path)
             if current_mod_time != self.last_mod_time:
@@ -108,6 +114,7 @@ open 方法会调用上述两个方法，如果找到 Photoshop 并成功导出�
 class open_phtoshop():
 
     asset_path = ''
+    export_paths = []
 
     def find_phtoshop_exe_path(self):
         possible_paths = [
@@ -148,7 +155,8 @@ class open_phtoshop():
             if ps_path != None:
                 command = [ps_path, export_tex_path]
                 process = subprocess.Popen(command)
-                Check_texture_refs(export_tex_path, self.asset_path, process)
+                self.export_paths.append(export_tex_path)
+                Check_texture_refs(export_tex_path, self.asset_path, self, process)
                 
 """
 该代码段用于在Unreal Engine的内容浏览器资产上下文菜单中添加一个子菜单项，以便用户可以将资产发送到Photoshop。具体实现包括：
@@ -167,7 +175,8 @@ send_menu:unreal.ToolMenu = menu.add_sub_menu(menu.get_name(), 'GetAssetActions'
 send_menu.menu_type = unreal.MultiBoxType.MENU
 
 entry:unreal.ToolMenuEntry = unreal.ToolMenuEntry(name='SendPhtoshop', type=unreal.MultiBlockType.MENU_ENTRY)
-entry.set_label('send to photoshop')
+entry.set_label('Send to photoshop')
 entry.set_string_command(unreal.ToolMenuStringCommandType.PYTHON, '', 'open_phtoshop_obj.open()')
 
 send_menu.add_menu_entry('Settings', entry)
+
