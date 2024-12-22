@@ -111,13 +111,13 @@ class open_phtoshop():
 
     def find_phtoshop_exe_path(self):
         possible_paths = [
-            os.environ.get("PROGRAMFILES", "C:\\Program Files"),
+            os.environ.get('PROGRAMFILES', 'C:\\Program Files') + '\\Adobe',
         ]
 
         for base_path in possible_paths:
             for root, dirs, files in os.walk(base_path):
                 for file in files:
-                    if file.lower() == "photoshop.exe":
+                    if file.lower() == 'photoshop.exe':
                         return os.path.join(root, file)
         
         return None
@@ -167,7 +167,7 @@ send_menu:unreal.ToolMenu = menu.add_sub_menu(menu.get_name(), 'GetAssetActions'
 send_menu.menu_type = unreal.MultiBoxType.MENU
 
 entry:unreal.ToolMenuEntry = unreal.ToolMenuEntry(name='SendPhtoshop', type=unreal.MultiBlockType.MENU_ENTRY)
-entry.set_label('Send to photoshop')
+entry.set_label('send to photoshop')
 entry.set_string_command(unreal.ToolMenuStringCommandType.PYTHON, '', 'open_phtoshop_obj.open()')
 
 send_menu.add_menu_entry('Settings', entry)
