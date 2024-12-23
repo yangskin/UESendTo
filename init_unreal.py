@@ -156,7 +156,9 @@ class open_phtoshop():
                 command = [ps_path, export_tex_path]
                 process = subprocess.Popen(command)
                 self.export_paths.append(export_tex_path)
-                self.check_texture_refs_list.append(Check_texture_refs(export_tex_path, self.asset_path, self, process))
+                self.check_texture_refs_list.append(
+                    Check_texture_refs(export_tex_path, self.asset_path, self, process)
+                    )
                 
 """
 该代码段用于在Unreal Engine的内容浏览器资产上下文菜单中添加一个子菜单项，以便用户可以将资产发送到Photoshop。具体实现包括：
