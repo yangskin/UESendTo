@@ -35,18 +35,14 @@ class Tick_timer():
         unreal.unregister_slate_post_tick_callback(self._tick)
 
 """
-该类用于检查纹理引用，并在纹理文件更新时自动重新导入资产。
+该类用于检查纹理引用并根据需要重新导入纹理。
 
-- `asset_path`: 纹理资产的路径。
-- `folder_path`: 纹理文件所在的文件夹路径（未在代码中使用）。
-- `current_check_texture_file_path`: 当前检查的纹理文件路径。
-- `last_mod_time`: 上次修改纹理文件的时间戳。
-- `popen`: 用于执行外部命令的子进程。
+Check_texture_refs 类是一个定时器类，它监视指定纹理文件的修改时间。如果文件被修改，并且关联的子进程已经完成（返回码为0），则执行以下操作：
+1. 停止所有正在进行的纹理引用检查。
+2. 删除所有相关的导出路径文件。
+3. 终止子进程。
 
-该类继承自`Tick_timer`，并定期检查纹理文件是否被修改。如果文件被修改，它将重新加载纹理资产，并尝试保留原有的sRGB、压缩设置和LOD组设置。
-
-- `__init__(self, texture_path, asset_path, popen:subprocess.Popen)`: 构造函数，初始化检查器并设置定时器。
-- `_timer(self, delta)`: 定时器回调函数，检查纹理文件是否被修改，并在必要时重新导入资产。
+如果纹理文件被修改，但子进程尚未完成，则重新导入纹理，并尝试保持之前的关键设置（如srgb、压缩设置和lod组）。
 """
 class Check_texture_refs(Tick_timer):
     asset_path = ''
@@ -76,7 +72,10 @@ class Check_texture_refs(Tick_timer):
 
             if self.process.poll() is not None:
                 if self.process.poll() == 0:
-                    self._stop()
+
+                    for check in self.open_phtoshop_ins.check_texture_refs_list:
+                        check._stop()
+
                     for export_path in self.open_phtoshop_ins.export_paths:
                         if os.path.exists(export_path):
                             os.remove(export_path)
@@ -115,6 +114,7 @@ class open_phtoshop():
 
     asset_path = ''
     export_paths = []
+    check_texture_refs_list = []
 
     def find_phtoshop_exe_path(self):
         possible_paths = [
@@ -156,7 +156,7 @@ class open_phtoshop():
                 command = [ps_path, export_tex_path]
                 process = subprocess.Popen(command)
                 self.export_paths.append(export_tex_path)
-                Check_texture_refs(export_tex_path, self.asset_path, self, process)
+                self.check_texture_refs_list.append(Check_texture_refs(export_tex_path, self.asset_path, self, process))
                 
 """
 该代码段用于在Unreal Engine的内容浏览器资产上下文菜单中添加一个子菜单项，以便用户可以将资产发送到Photoshop。具体实现包括：
