@@ -70,8 +70,9 @@ class Check_texture_refs(Tick_timer):
         
         if os.path.exists(self.current_check_texture_file_path):
 
-            if self.process.poll() is not None:
-                if self.process.poll() == 0:
+            pool = self.process.poll()
+            if pool is not None:
+                if pool == 0:
 
                     for check in self.open_phtoshop_ins.check_texture_refs_list:
                         check._stop()
@@ -86,22 +87,23 @@ class Check_texture_refs(Tick_timer):
             if current_mod_time != self.last_mod_time:
                 self.last_mod_time = current_mod_time 
 
-                #ue5.5以前版本重新导入贴图后无法保持之前的设置，需要把关键设置记录，并在重新导入后重新设置。
-                current_texture:unreal.Texture2D = unreal.EditorAssetLibrary.load_asset(self.asset_path)
-                srgb = current_texture.get_editor_property("srgb")
-                compression_settings = current_texture.get_editor_property("compression_settings")
-                lod_group = current_texture.get_editor_property("lod_group")
+                if unreal.EditorAssetLibrary.does_asset_exist(self.asset_path):
+                    #ue5.5以前版本重新导入贴图后无法保持之前的设置，需要把关键设置记录，并在重新导入后重新设置。
+                    current_texture:unreal.Texture2D = unreal.EditorAssetLibrary.load_asset(self.asset_path)
+                    srgb = current_texture.get_editor_property("srgb")
+                    compression_settings = current_texture.get_editor_property("compression_settings")
+                    lod_group = current_texture.get_editor_property("lod_group")
 
-                asset_tools:unreal.AssetTools = unreal.AssetToolsHelpers.get_asset_tools()
-                data = unreal.AutomatedAssetImportData()
-                data.set_editor_property("destination_path", self.asset_path[:self.asset_path.rfind("/")])
-                data.set_editor_property("filenames", [self.current_check_texture_file_path])
-                data.set_editor_property("replace_existing", True)
-                asset_tools.import_assets_automated(data)
+                    asset_tools:unreal.AssetTools = unreal.AssetToolsHelpers.get_asset_tools()
+                    data = unreal.AutomatedAssetImportData()
+                    data.set_editor_property("destination_path", self.asset_path[:self.asset_path.rfind("/")])
+                    data.set_editor_property("filenames", [self.current_check_texture_file_path])
+                    data.set_editor_property("replace_existing", True)
+                    asset_tools.import_assets_automated(data)
 
-                current_texture.set_editor_property("srgb", srgb)
-                current_texture.set_editor_property("compression_settings", compression_settings)
-                current_texture.set_editor_property("lod_group", lod_group)
+                    current_texture.set_editor_property("srgb", srgb)
+                    current_texture.set_editor_property("compression_settings", compression_settings)
+                    current_texture.set_editor_property("lod_group", lod_group)
 
 '''
 open_phtoshop 类用于在 Unreal 编辑器中导出选中的纹理，并尝试打开 Photoshop 来处理这些纹理。
