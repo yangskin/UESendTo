@@ -1,186 +1,266 @@
+"""
+虚幻引擎贴图编辑工具。
+提供贴图实时同步编辑功能。
+"""
+
 import unreal
 import os
 import subprocess
+from typing import List, Optional  # Optional表示可选类型，即可以为None
 
-'''
-Tick_timer 类用于管理一个定时器，该定时器在指定的时间间隔内触发。
-
-interval: 定时器的时间间隔，默认为1.0秒。
-_tick: 用于存储定时器的回调标识。
-_current_tick_interval: 记录自上次触发以来的时间累积。
-
-方法:
-__init__(interval): 构造函数，初始化定时器并注册Slate后置tick回调。
-_timer(delta): 定时器回调函数，处理时间累积并触发定时事件。
-_stop(): 停止定时器，注销Slate后置tick回调。
-'''
-class Tick_timer():
-    _tick = None
-    interval:float = 1.0
-    _current_tick_interval = 0
-
-    def __init__(self, interval = 1.0):
-        self.interval = interval
+class TickTimer:
+    """定时器基类，用于处理虚幻引擎的 tick 事件。
+    tick事件是游戏引擎中按固定时间间隔执行的更新事件。
+    """
+    
+    def __init__(self, interval: float = 1.0):
+        """初始化定时器
+        Args:
+            interval: tick 间隔时间(秒)
+        """
+        # 注册一个虚幻引擎的tick回调，每帧都会调用self._timer方法
         self._tick = unreal.register_slate_post_tick_callback(self._timer)
+        self.interval = interval
+        self._current_interval = 0.0
 
-    def _timer(self, delta):
-        self._current_tick_interval += delta
-
-        if self._current_tick_interval < self.interval:
+    def _timer(self, delta: float) -> None:
+        """定时器的核心逻辑
+        Args:
+            delta: 两帧之间的时间间隔
+        """
+        self._current_interval += delta
+        # 当累积时间未达到间隔时间时，直接返回
+        if self._current_interval < self.interval:
             return
-        
-        self._current_tick_interval = 0
+        self._current_interval = 0.0
 
-    def _stop(self):
-        unreal.unregister_slate_post_tick_callback(self._tick)
+    def stop(self) -> None:
+        """停止定时器"""
+        if self._tick:
+            unreal.unregister_slate_post_tick_callback(self._tick)
 
-"""
-该类用于检查纹理引用并根据需要重新导入纹理。
+class IMonitorCallback:
+    """监控器回调接口"""
+    def cleanup_all_temp_file(self) -> None:
+        """清理临时文件"""
+        pass
 
-Check_texture_refs 类是一个定时器类，它监视指定纹理文件的修改时间。如果文件被修改，并且关联的子进程已经完成（返回码为0），则执行以下操作：
-1. 停止所有正在进行的纹理引用检查。
-2. 删除所有相关的导出路径文件。
-3. 终止子进程。
+    def stop_monitor(self, monitor: 'TextureMonitor') -> None:
+        """停止监控器"""
+        pass
 
-如果纹理文件被修改，但子进程尚未完成，则重新导入纹理，并尝试保持之前的关键设置（如srgb、压缩设置和lod组）。
-"""
-class Check_texture_refs(Tick_timer):
-    asset_path = ''
-    folder_path = ''
-    current_check_texture_file_path = ''
-    last_mod_time = 0
-    open_phtoshop_ins = None
-    process:subprocess.Popen = None
-
-    def __init__(self, texture_path, asset_path, open_phtoshop_ins, process:subprocess.Popen):
+class TextureMonitor(TickTimer):
+    """监控贴图文件变化并自动重新导入。
+    继承自TickTimer类，用于检测贴图文件是否发生变化。
+    """
+    
+    def __init__(self, texture_path: str, asset_path: str, 
+                 callback: IMonitorCallback, process: subprocess.Popen):
+        """
+        Args:
+            texture_path: 贴图文件的本地路径
+            asset_path: 虚幻引擎中资产的路径
+            callback: 回调接口实例
+            process: Photoshop进程实例
+        """
         if not os.path.exists(texture_path):
             return
 
+        self.texture_path = texture_path
         self.asset_path = asset_path
-        self.current_check_texture_file_path = texture_path
-        self.last_mod_time = os.path.getmtime(self.current_check_texture_file_path)
-        self.open_phtoshop_ins = open_phtoshop_ins
+        self.callback = callback
         self.process = process
+        # 记录文件的最后修改时间
+        self.last_modified = os.path.getmtime(texture_path)
 
-        super().__init__(1.0)
+        super().__init__(1.0)  # 调用父类初始化方法，设置1秒的检查间隔
 
-    def _timer(self, delta):
-
+    def _timer(self, delta: float) -> None:
         super()._timer(delta)
         
-        if os.path.exists(self.current_check_texture_file_path):
+        if not os.path.exists(self.texture_path):
+            return
 
-            pool = self.process.poll()
-            if pool is not None:
-                if pool == 0:
+        if self._should_cleanup():
+            self._cleanup()
+            return
 
-                    for check in self.open_phtoshop_ins.check_texture_refs_list:
-                        check._stop()
+        self._check_for_changes()
 
-                    for export_path in self.open_phtoshop_ins.export_paths:
-                        if os.path.exists(export_path):
-                            os.remove(export_path)
-                    self.process.terminate()
-                    return
+    def _should_cleanup(self) -> bool:
+        """检查是否需要清理资源"""
+        return self.process.poll() == 0
 
-            current_mod_time = os.path.getmtime(self.current_check_texture_file_path)
-            if current_mod_time != self.last_mod_time:
-                self.last_mod_time = current_mod_time 
+    def _cleanup(self) -> None:
+        """清理临时文件和进程"""
+        self.callback.cleanup_all_temp_file()
+        self.callback.stop_monitor(self)
+        self.process.terminate()
 
-                if unreal.EditorAssetLibrary.does_asset_exist(self.asset_path):
-                    #ue5.5以前版本重新导入贴图后无法保持之前的设置，需要把关键设置记录，并在重新导入后重新设置。
-                    current_texture:unreal.Texture2D = unreal.EditorAssetLibrary.load_asset(self.asset_path)
-                    srgb = current_texture.get_editor_property("srgb")
-                    compression_settings = current_texture.get_editor_property("compression_settings")
-                    lod_group = current_texture.get_editor_property("lod_group")
+    def _check_for_changes(self) -> None:
+        """检查并处理贴图变化
+        通过比较文件修改时间来检测文件是否被修改
+        """
+        current_modified = os.path.getmtime(self.texture_path)
+        if current_modified == self.last_modified:
+            return
 
-                    asset_tools:unreal.AssetTools = unreal.AssetToolsHelpers.get_asset_tools()
-                    data = unreal.AutomatedAssetImportData()
-                    data.set_editor_property("destination_path", self.asset_path[:self.asset_path.rfind("/")])
-                    data.set_editor_property("filenames", [self.current_check_texture_file_path])
-                    data.set_editor_property("replace_existing", True)
-                    asset_tools.import_assets_automated(data)
+        self.last_modified = current_modified
+        self._reimport_texture()
 
-                    current_texture.set_editor_property("srgb", srgb)
-                    current_texture.set_editor_property("compression_settings", compression_settings)
-                    current_texture.set_editor_property("lod_group", lod_group)
+    def _reimport_texture(self) -> None:
+        """重新导入贴图并保持设置"""
+        if not unreal.EditorAssetLibrary.does_asset_exist(self.asset_path):
+            return
 
-'''
-open_phtoshop 类用于在 Unreal 编辑器中导出选中的纹理，并尝试打开 Photoshop 来处理这些纹理。
+        texture = unreal.EditorAssetLibrary.load_asset(self.asset_path)
+        settings = self._store_texture_settings(texture)
+        self._do_reimport()
+        self._restore_texture_settings(texture, settings)
 
-find_phtoshop_exe_path 方法会搜索系统中可能安装的 Photoshop 可执行文件路径。
-export_select_texture 方法会导出选中的纹理文件到临时目录，并返回导出文件的路径。
-open 方法会调用上述两个方法，如果找到 Photoshop 并成功导出纹理，则会启动 Photoshop 打开导出的纹理文件。
-'''
-class open_phtoshop():
-
-    asset_path = ''
-    export_paths = []
-    check_texture_refs_list = []
-
-    def find_phtoshop_exe_path(self):
-        possible_paths = [
-            os.environ.get('PROGRAMFILES', 'C:\\Program Files') + '\\Adobe',
-        ]
-
-        for base_path in possible_paths:
-            for root, dirs, files in os.walk(base_path):
-                for file in files:
-                    if file.lower() == 'photoshop.exe':
-                        return os.path.join(root, file)
+    def _store_texture_settings(self, texture: unreal.Texture2D) -> dict:
+        """存储贴图关键设置
         
-        return None
-    
-    def export_select_texture(self):
-        assets:unreal.Array = unreal.EditorUtilityLibrary.get_selected_assets_of_class(unreal.Texture2D)
-        if len(assets) > 0:
-            self.asset_path = assets[0].get_path_name()
-
-            temp_dir = os.environ.get('TEMP')
-            export_path = os.path.join(temp_dir, assets[0].get_name() + ".tga")
+        保存贴图的重要属性，以便在重新导入后恢复这些设置
+        
+        Args:
+            texture: 虚幻引擎的贴图对象
             
-            task = unreal.AssetExportTask()
-            task.set_editor_property('automated', True)
-            task.set_editor_property('filename', export_path)
-            task.set_editor_property('object', assets[0])
-            task.set_editor_property('prompt', False)
-            task.set_editor_property('exporter', unreal.TextureExporterTGA())
-            unreal.Exporter.run_asset_export_task(task)
-  
-            return str(export_path)
+        Returns:
+            包含贴图设置的字典
+        """
+        return {
+            'srgb': texture.get_editor_property("srgb"),  # 是否使用sRGB色彩空间
+            'compression_settings': texture.get_editor_property("compression_settings"),  # 压缩设置
+            'lod_group': texture.get_editor_property("lod_group")  # LOD(细节层次)组设置
+        }
+
+    def _do_reimport(self) -> None:
+        """执行贴图重新导入"""
+        import_data = unreal.AutomatedAssetImportData()
+        import_data.set_editor_property("destination_path", os.path.dirname(self.asset_path))
+        import_data.set_editor_property("filenames", [self.texture_path])
+        import_data.set_editor_property("replace_existing", True)
+        
+        tools = unreal.AssetToolsHelpers.get_asset_tools()
+        tools.import_assets_automated(import_data)
+
+    def _restore_texture_settings(self, texture: unreal.Texture2D, settings: dict) -> None:
+        """恢复贴图设置"""
+        for prop, value in settings.items():
+            texture.set_editor_property(prop, value)
+
+class PhotoshopBridge(IMonitorCallback):
+    """处理与 Photoshop 的交互。
+    实现了在虚幻引擎和Photoshop之间的文件交互功能。
+    """
+
+    def __init__(self):
+        self.asset_path = ''  # 虚幻引擎中的资产路径
+        self.texture_monitors: List[TextureMonitor] = []  # 贴图监视器列表
+
+    def cleanup_all_temp_file(self) -> None:
+        """实现接口方法：清理临时文件"""
+        for monitors in self.texture_monitors:
+            if os.path.exists(monitors.texture_path):
+                os.remove(monitors.texture_path)
+
+    def stop_monitor(self, monitor: TextureMonitor) -> None:
+        """实现接口方法：停止监控器"""
+        if monitor in self.texture_monitors:
+            monitor.stop()
+            self.texture_monitors.remove(monitor)
+
+    def open_selected(self) -> None:
+        """在 Photoshop 中打开选中的贴图
+        
+        工作流程：
+        1. 将选中的贴图导出为临时文件
+        2. 查找Photoshop安装路径
+        3. 启动Photoshop并打开该文件
+        4. 开始监控文件变化
+        """
+        temp_path = self._export_texture()
+        if not temp_path:
+            return
+
+        ps_path = self._find_photoshop()
+        if ps_path:
+            self._launch_photoshop(ps_path, temp_path)
+
+    def _export_texture(self) -> Optional[str]:
+        """导出选中的贴图"""
+        assets = unreal.EditorUtilityLibrary.get_selected_assets_of_class(unreal.Texture2D)
+        if not assets:
+            return None
+
+        self.asset_path = assets[0].get_path_name()
+        temp_path = os.path.join(os.environ.get('TEMP'), f"{assets[0].get_name()}.tga")
+        
+        task = unreal.AssetExportTask()
+        task.set_editor_property('automated', True)
+        task.set_editor_property('filename', temp_path)
+        task.set_editor_property('object', assets[0])
+        task.set_editor_property('prompt', False)
+        task.set_editor_property('exporter', unreal.TextureExporterTGA())
+        unreal.Exporter.run_asset_export_task(task)
+
+        return temp_path
+
+    def _find_photoshop(self) -> Optional[str]:
+        """查找 Photoshop 安装路径"""
+        adobe_path = os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'Adobe')
+        
+        for root, _, files in os.walk(adobe_path):
+            if 'photoshop.exe' in (f.lower() for f in files):
+                return os.path.join(root, 'photoshop.exe')
         return None
 
-    def open(self):
-        export_tex_path = self.export_select_texture()
-        if export_tex_path != None:
-            ps_path = self.find_phtoshop_exe_path()
-            if ps_path != None:
-                command = [ps_path, export_tex_path]
-                process = subprocess.Popen(command)
-                self.export_paths.append(export_tex_path)
-                self.check_texture_refs_list.append(
-                    Check_texture_refs(export_tex_path, self.asset_path, self, process)
-                    )
-                
-"""
-该代码段用于在Unreal Engine的内容浏览器资产上下文菜单中添加一个子菜单项，以便用户可以将资产发送到Photoshop。具体实现包括：
-1. 获取内容浏览器的工具菜单。
-2. 在工具菜单中添加一个名为'GetAssetActions'的子菜单。
-3. 在子菜单中添加一个名为'send to photoshop'的菜单项。
-4. 当用户选择此菜单项时，将调用`open_phtoshop_obj.open()`方法打开Photoshop。
-"""
-global open_phtoshop_obj 
-open_phtoshop_obj = open_phtoshop()
+    def _launch_photoshop(self, ps_path: str, texture_path: str) -> None:
+        """启动 Photoshop 并监控贴图变化"""
+        process = subprocess.Popen([ps_path, texture_path])
+        self.texture_monitors.append(
+            TextureMonitor(texture_path, self.asset_path, self, process)
+        )
 
-menus = unreal.ToolMenus.get()
-menu:unreal.ToolMenu = menus.find_menu('ContentBrowser.AssetContextMenu')
+# 初始化菜单
+class MenuInitializer:
+    """菜单初始化器基类"""
+    def __init__(self, bridge_class, bridge_name: str, menu_label: str):
+        self.bridge_class = bridge_class
+        self.bridge_name = bridge_name
+        self.menu_label = menu_label
+        
+    def init_menu(self):
+        """初始化编辑器菜单"""
+        # 声明全局变量
+        globals()[self.bridge_name] = self.bridge_class()
+        
+        menu = unreal.ToolMenus.get().find_menu('ContentBrowser.AssetContextMenu')
+        
+        send_menu = menu.add_sub_menu(
+            menu.get_name(),
+            'GetAssetActions', 
+            'send',
+            'Send',
+            ''
+        )
+        send_menu.menu_type = unreal.MultiBoxType.MENU
+        
+        entry = unreal.ToolMenuEntry(
+            name=f'SendTo{self.menu_label}',
+            type=unreal.MultiBlockType.MENU_ENTRY
+        )
+        entry.set_label(f'Send to {self.menu_label}')
+        entry.set_string_command(
+            unreal.ToolMenuStringCommandType.PYTHON,
+            '',
+            f'{self.bridge_name}.open_selected()'
+        )
+        
+        send_menu.add_menu_entry('Settings', entry)
 
-send_menu:unreal.ToolMenu = menu.add_sub_menu(menu.get_name(), 'GetAssetActions', 'send', 'Send', '')
-send_menu.menu_type = unreal.MultiBoxType.MENU
-
-entry:unreal.ToolMenuEntry = unreal.ToolMenuEntry(name='SendPhtoshop', type=unreal.MultiBlockType.MENU_ENTRY)
-entry.set_label('Send to photoshop')
-entry.set_string_command(unreal.ToolMenuStringCommandType.PYTHON, '', 'open_phtoshop_obj.open()')
-
-send_menu.add_menu_entry('Settings', entry)
+# 初始化Photoshop菜单
+photoshop_menu = MenuInitializer(PhotoshopBridge, '_PhotoshopBridge', 'Photoshop')
+photoshop_menu.init_menu()
 
