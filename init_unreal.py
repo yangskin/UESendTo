@@ -42,7 +42,7 @@ class TickTimer:
 class IMonitorCallback:
     """监控器回调接口"""
     def cleanup_all_temp_file(self) -> None:
-        """清理临时文件"""
+        """清理所有临时文件"""
         pass
 
     def stop_monitor(self, monitor: 'TextureMonitor') -> None:
@@ -160,7 +160,7 @@ class PhotoshopBridge(IMonitorCallback):
         self.texture_monitors: List[TextureMonitor] = []  # 贴图监视器列表
 
     def cleanup_all_temp_file(self) -> None:
-        """实现接口方法：清理临时文件"""
+        """实现接口方法：清理所有临时文件"""
         for monitors in self.texture_monitors:
             if os.path.exists(monitors.texture_path):
                 os.remove(monitors.texture_path)
@@ -192,6 +192,11 @@ class PhotoshopBridge(IMonitorCallback):
         """导出选中的贴图"""
         assets = unreal.EditorUtilityLibrary.get_selected_assets_of_class(unreal.Texture2D)
         if not assets:
+            unreal.EditorDialog.show_message(
+                title='错误',
+                message='请选择一个贴图资产',
+                message_type=unreal.AppMsgType.OK
+            )
             return None
 
         self.asset_path = assets[0].get_path_name()
