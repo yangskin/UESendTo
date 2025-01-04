@@ -6,7 +6,7 @@
 import unreal
 import os
 import subprocess
-from typing import List, Optional  # Optional表示可选类型，即可以为None
+from typing import List, Optional, Tuple  # Optional表示可选类型，即可以为None
 
 class TickTimer:
     """定时器基类，用于处理虚幻引擎的 tick 事件。
@@ -76,15 +76,25 @@ class TextureMonitor(TickTimer):
         super().__init__(1.0)  # 调用父类初始化方法，设置1秒的检查间隔
 
     def _timer(self, delta: float) -> None:
+        """定时器回调函数
+        
+        定期检查贴图文件是否发生变化，并在需要时进行清理或重新导入
+        
+        Args:
+            delta: 两帧之间的时间间隔
+        """
         super()._timer(delta)
         
+        # 检查贴图文件是否存在
         if not os.path.exists(self.texture_path):
             return
 
+        # 检查是否需要清理资源
         if self._should_cleanup():
             self._cleanup()
             return
 
+        # 检查贴图是否发生变化
         self._check_for_changes()
 
     def _should_cleanup(self) -> bool:
@@ -172,26 +182,26 @@ class PhotoshopBridge(IMonitorCallback):
             self.texture_monitors.remove(monitor)
 
     def open_selected(self) -> None:
-        """在 Photoshop 中打开选中的贴图
-        
-        工作流程：
-        1. 将选中的贴图导出为临时文件
-        2. 查找Photoshop安装路径
-        3. 启动Photoshop并打开该文件
-        4. 开始监控文件变化
-        """
-        temp_path = self._export_texture()
-        if not temp_path:
-            return
+        """在 Photoshop 中打开选中的贴图"""
 
         ps_path = self._find_photoshop()
         if ps_path:
-            self._launch_photoshop(ps_path, temp_path)
 
-    def _export_texture(self) -> Optional[str]:
+            export_path = self._export_texture()
+            if export_path == None:
+                return
+            
+            self._launch_photoshop(ps_path, export_path)
+
+    def _export_texture(self) -> Optional[List[Tuple[str, str]]]:
         """导出选中的贴图"""
-        assets = unreal.EditorUtilityLibrary.get_selected_assets_of_class(unreal.Texture2D)
-        if not assets:
+        assets = unreal.EditorUtilityLibrary.get_selected_assets()
+        texture_assets = []
+        for asset in assets:
+            if isinstance(asset, unreal.Texture2D):
+                texture_assets.append(asset)
+
+        if len(texture_assets) == 0:
             unreal.EditorDialog.show_message(
                 title='错误',
                 message='请选择一个贴图资产',
@@ -199,18 +209,22 @@ class PhotoshopBridge(IMonitorCallback):
             )
             return None
 
-        self.asset_path = assets[0].get_path_name()
-        temp_path = os.path.join(os.environ.get('TEMP'), f"{assets[0].get_name()}.tga")
-        
-        task = unreal.AssetExportTask()
-        task.set_editor_property('automated', True)
-        task.set_editor_property('filename', temp_path)
-        task.set_editor_property('object', assets[0])
-        task.set_editor_property('prompt', False)
-        task.set_editor_property('exporter', unreal.TextureExporterTGA())
-        unreal.Exporter.run_asset_export_task(task)
+        request = []
 
-        return temp_path
+        for asset in texture_assets:
+            temp_path = os.path.join(os.environ.get('TEMP'), f"{asset.get_name()}.tga")
+            
+            task = unreal.AssetExportTask()
+            task.set_editor_property('automated', True)
+            task.set_editor_property('filename', temp_path)
+            task.set_editor_property('object', assets[0])
+            task.set_editor_property('prompt', False)
+            task.set_editor_property('exporter', unreal.TextureExporterTGA())
+            unreal.Exporter.run_asset_export_task(task)
+
+            request.append((temp_path, assets[0].get_path_name()))
+
+        return request
 
     def _find_photoshop(self) -> Optional[str]:
         """查找 Photoshop 安装路径"""
@@ -221,12 +235,22 @@ class PhotoshopBridge(IMonitorCallback):
                 return os.path.join(root, 'photoshop.exe')
         return None
 
-    def _launch_photoshop(self, ps_path: str, texture_path: str) -> None:
+    def _launch_photoshop(self, ps_path: str, texture_path: List[Tuple[str, str]]) -> None:
         """启动 Photoshop 并监控贴图变化"""
-        process = subprocess.Popen([ps_path, texture_path])
-        self.texture_monitors.append(
-            TextureMonitor(texture_path, self.asset_path, self, process)
-        )
+
+        # 组合命令行
+        command = [ps_path]
+        for item in texture_path:
+            command.append(item[0])
+
+        # 启动Photoshop     
+        process = subprocess.Popen(command)
+
+        # 监控贴图变化
+        for item in texture_path:
+            self.texture_monitors.append(
+                TextureMonitor(item[0], item[1], self, process)
+            )
 
 # 初始化菜单
 class MenuInitializer:
