@@ -217,12 +217,12 @@ class PhotoshopBridge(IMonitorCallback):
             task = unreal.AssetExportTask()
             task.set_editor_property('automated', True)
             task.set_editor_property('filename', temp_path)
-            task.set_editor_property('object', assets[0])
+            task.set_editor_property('object', asset)
             task.set_editor_property('prompt', False)
             task.set_editor_property('exporter', unreal.TextureExporterTGA())
             unreal.Exporter.run_asset_export_task(task)
 
-            request.append((temp_path, assets[0].get_path_name()))
+            request.append((temp_path, asset.get_path_name()))
 
         return request
 
@@ -255,10 +255,11 @@ class PhotoshopBridge(IMonitorCallback):
 # 初始化菜单
 class MenuInitializer:
     """菜单初始化器基类"""
-    def __init__(self, bridge_class, bridge_name: str, menu_label: str):
+    def __init__(self, bridge_class, bridge_name: str, menu_label: str, method_name: str):
         self.bridge_class = bridge_class
         self.bridge_name = bridge_name
         self.menu_label = menu_label
+        self.method_name = method_name
         
     def init_menu(self):
         """初始化编辑器菜单"""
@@ -284,12 +285,12 @@ class MenuInitializer:
         entry.set_string_command(
             unreal.ToolMenuStringCommandType.PYTHON,
             '',
-            f'{self.bridge_name}.open_selected()'
+            f'{self.bridge_name}.{self.method_name}()'
         )
         
         send_menu.add_menu_entry('Settings', entry)
 
 # 初始化Photoshop菜单
-photoshop_menu = MenuInitializer(PhotoshopBridge, '_PhotoshopBridge', 'Photoshop')
+photoshop_menu = MenuInitializer(PhotoshopBridge, '_PhotoshopBridge', 'Photoshop', 'open_selected')
 photoshop_menu.init_menu()
 
