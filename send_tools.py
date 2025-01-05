@@ -8,6 +8,10 @@ import os
 import subprocess
 from typing import List, Optional, Tuple
 
+# 配置项
+PHOTOSHOP_CUSTOM_PATH = ""  # 自定义Photoshop安装路径
+PHOTOSHOP_DEFAULT_PATH = os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'Adobe')  # 默认Photoshop安装路径
+
 class TickTimer:
     """定时器基类，用于处理虚幻引擎的 tick 事件。
     tick事件是游戏引擎中按固定时间间隔执行的更新事件。
@@ -214,11 +218,29 @@ class PhotoshopBridge(IMonitorCallback):
 
     def _find_photoshop(self) -> Optional[str]:
         """查找 Photoshop 安装路径"""
-        adobe_path = os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'Adobe')
+        # 首先检查自定义路径
+        if PHOTOSHOP_CUSTOM_PATH and os.path.exists(PHOTOSHOP_CUSTOM_PATH):
+            adobe_path = PHOTOSHOP_CUSTOM_PATH
+        else:
+            adobe_path = PHOTOSHOP_DEFAULT_PATH
         
+        # 在指定路径中查找photoshop.exe
         for root, _, files in os.walk(adobe_path):
             if 'photoshop.exe' in (f.lower() for f in files):
                 return os.path.join(root, 'photoshop.exe')
+                
+        # 如果在自定义路径中未找到，且使用的是自定义路径，则尝试默认路径
+        if adobe_path != PHOTOSHOP_DEFAULT_PATH:
+            for root, _, files in os.walk(PHOTOSHOP_DEFAULT_PATH):
+                if 'photoshop.exe' in (f.lower() for f in files):
+                    return os.path.join(root, 'photoshop.exe')
+        
+        # 如果都未找到，显示错误对话框
+        unreal.EditorDialog.show_message(
+            title='错误',
+            message='未找到Photoshop安装路径，请检查安装或配置自定义路径',
+            message_type=unreal.AppMsgType.OK
+        )
         return None
 
     def _launch_photoshop(self, ps_path: str, texture_path: List[Tuple[str, str]]) -> None:
