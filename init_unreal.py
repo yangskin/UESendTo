@@ -39,4 +39,3 @@ class MenuInitializer:
 # 初始化send to Photoshop菜单
 from send_tools import PhotoshopBridge
 MenuInitializer.init_menu(PhotoshopBridge, '_PhotoshopBridge', 'Photoshop', 'open_selected')
-
