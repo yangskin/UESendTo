@@ -4,7 +4,7 @@
 
 **GitHub项目地址**: [yangskin/UESendTo](https://github.com/yangskin/UESendTo)
 
-UE Texture Editor Tool 提供与 Photoshop 的实时同步编辑功能，适用于 Unreal Engine 4.26 或更高版本。
+UE Texture Editor Tool 提供与 Photoshop 的实时同步编辑功能，适用于 Unreal Engine 5.1 或更高版本。
 
 ### 获取方式
 
