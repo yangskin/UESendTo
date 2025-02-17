@@ -2,6 +2,9 @@
 
 
 <img src="image/1.gif" width="600" alt="示例图片"></br>
+## B站视频教程
+
+[Unreal Python 工具开发基础教程](https://www.bilibili.com/video/BV1peALe2Eqz)
 ## 一、获取与部署
 
 **GitHub项目地址**: [yangskin/UESendTo](https://github.com/yangskin/UESendTo)
@@ -38,7 +41,7 @@ UE Texture Editor Tool 提供与 Photoshop 的实时同步编辑功能，适用�
 - 实时同步编辑：自动监控贴图变化并更新 Unreal 资源
 - 多贴图支持：可同时编辑多个贴图
 - 自动清理：关闭 Photoshop 时清理临时文件
-- 配置可扩展：可在代码中修改自定义路径、版本控制等功能
+- 配置可扩展：可在代码中修改自定义路径
 
 ---
 
