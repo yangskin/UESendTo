@@ -1,5 +1,7 @@
 # UE Texture Send Photoshop Tool (UE贴图同步PS工具)
 
+
+<img src="image/1.gif" width="600" alt="示例图片"></br>
 ## 一、获取与部署
 
 **GitHub项目地址**: [yangskin/UESendTo](https://github.com/yangskin/UESendTo)
