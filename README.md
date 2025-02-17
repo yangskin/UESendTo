@@ -1,6 +1,7 @@
 # UE Texture Editor Tool (UE贴图编辑工具)
 
 一个用于虚幻引擎的贴图编辑工具，提供与Photoshop的实时同步编辑功能。
+<img src="image/1.gif" width="600" alt="示例图片"></br>
 
 ## 功能特点
 
