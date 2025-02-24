@@ -7,6 +7,9 @@ import unreal
 import os
 import subprocess
 from typing import List, Optional, Tuple
+from PIL import Image
+from psd_tools import PSDImage
+from psd_tools.api.layers import PixelLayer
 
 # 配置项
 PHOTOSHOP_CUSTOM_PATH = ""  # 自定义Photoshop安装路径
@@ -162,8 +165,13 @@ class PhotoshopBridge(IMonitorCallback):
     def cleanup_all_temp_file(self) -> None:
         """实现接口方法：清理所有临时文件"""
         for monitors in self.texture_monitors:
+            #替换后缀为'tga'
             if os.path.exists(monitors.texture_path):
                 os.remove(monitors.texture_path)
+                
+            tga_texture_path = monitors.texture_path.replace('.psd', '.tga')
+            if os.path.exists(tga_texture_path):
+                os.remove(tga_texture_path)
 
     def stop_monitor(self, monitor: TextureMonitor) -> None:
         """实现接口方法：停止监控器"""
@@ -182,6 +190,17 @@ class PhotoshopBridge(IMonitorCallback):
                 return
             
             self._launch_photoshop(ps_path, export_path)
+
+    #参考https://mp.weixin.qq.com/s/Gw1W0kwTcst9ecAw4zck2A
+    def _save_to_psd(self, tga_path, save_path):
+        image = Image.open(tga_path)
+        image_obj = image.convert("RGBA")
+        
+        # 将PIL图像转换为PSD格式
+        psd = PSDImage.frompil(image_obj)
+
+        psd.save(save_path) 
+        image.close()
 
     def _export_texture(self) -> Optional[List[Tuple[str, str]]]:
         """导出选中的贴图"""
@@ -203,7 +222,8 @@ class PhotoshopBridge(IMonitorCallback):
 
         for asset in texture_assets:
             temp_path = os.path.join(os.environ.get('TEMP'), f"{asset.get_name()}.tga")
-            
+            psd_temp_path = os.path.join(os.environ.get('TEMP'), f"{asset.get_name()}.psd")
+
             task = unreal.AssetExportTask()
             task.set_editor_property('automated', True)
             task.set_editor_property('filename', temp_path)
@@ -212,7 +232,9 @@ class PhotoshopBridge(IMonitorCallback):
             task.set_editor_property('exporter', unreal.TextureExporterTGA())
             unreal.Exporter.run_asset_export_task(task)
 
-            request.append((temp_path, asset.get_path_name()))
+            self._save_to_psd(temp_path, psd_temp_path)
+
+            request.append((psd_temp_path, asset.get_path_name()))
 
         return request
 

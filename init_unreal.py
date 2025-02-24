@@ -36,6 +36,43 @@ class MenuInitializer:
         
         send_menu.add_menu_entry('Settings', entry)
 
+class ContentBrowserToolBarButtonInitializer:
+    """用于添加工具栏按钮"""
+    @staticmethod
+    def add_button(section: str, button_name: str, label: str, tooltip: str,
+                   icon_style_set: str, icon_style: str, on_click_function: str):
+        menus = unreal.ToolMenus.get()
+        menu = menus.find_menu("ContentBrowser.ToolBar")
+
+        entry = unreal.ToolMenuEntry(
+            name=button_name,
+            type=unreal.MultiBlockType.TOOL_BAR_BUTTON,
+            insert_position=unreal.ToolMenuInsert("", unreal.ToolMenuInsertType.DEFAULT)
+        )
+        entry.set_label(label)
+        entry.set_tool_tip(tooltip)
+        entry.set_icon(icon_style_set, icon_style)
+        entry.set_string_command(
+            unreal.ToolMenuStringCommandType.PYTHON,
+            string = on_click_function, 
+            custom_type = unreal.Name("_placeholder_")
+        )
+
+        menu.add_menu_entry(section, entry)
+        menus.refresh_all_widgets()
+
 # 初始化send to Photoshop菜单
 from send_tools import PhotoshopBridge
 MenuInitializer.init_menu(PhotoshopBridge, '_PhotoshopBridge', 'Photoshop', 'open_selected')
+
+
+# 示例调用：添加 Content Browser 工具栏自定义按钮
+ContentBrowserToolBarButtonInitializer.add_button(
+    section="Scripts",
+    button_name="SendPhotoshopButton",
+    label="SendPS",
+    tooltip="发送贴图到Photoshop",
+    icon_style_set="EditorStyle",
+    icon_style="ContentBrowser.AssetActions",
+    on_click_function="_PhotoshopBridge.open_selected()"
+)
