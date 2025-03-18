@@ -12,7 +12,7 @@ from psd_tools import PSDImage
 from psd_tools.api.layers import PixelLayer
 
 # 配置项
-PHOTOSHOP_CUSTOM_PATH = ""  # 自定义Photoshop安装路径
+PHOTOSHOP_CUSTOM_PATH = os.environ.get('THM_PHOTOSHOP_ROOT', "")  # 优先使用环境变量中的自定义Photoshop安装路径
 PHOTOSHOP_DEFAULT_PATH = os.path.join(os.environ.get('PROGRAMFILES', 'C:\\Program Files'), 'Adobe')  # 默认Photoshop安装路径
 
 class TickTimer:
