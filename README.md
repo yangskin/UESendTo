@@ -32,7 +32,7 @@
    - `send_tools.py`
 
 3. 安装依赖库
-   在Unreal Python环境中安装ps_tools依赖库：
+   在Unreal Python环境中安装psd_tools依赖库：
 
    查找引擎安装路径方法：
    - 默认安装路径：`C:\Program Files\Epic Games\UE_X.XX`（将X.XX替换为实际版本号）
@@ -41,7 +41,7 @@
 
    确认引擎安装路径后以管理员运行CMD。并执行。
    ```
-   "引擎安装目录\Engine\Binaries\ThirdParty\Python\Win64\python.exe" -m pip install ps_tools
+   "引擎安装目录\Engine\Binaries\ThirdParty\Python\Win64\python.exe" -m pip install psd_tools
    ```
    参考安装视频：[YouTube教程链接](https://www.youtube.com/watch?v=Qt0AW08REKg)
 
